@@ -1,0 +1,78 @@
+setup:
+  summary: Configure development environment
+  prompt:
+    github_ssh_key_path_raw: 'Path to your ssh github key (usually: ~/.ssh/id_rsa)?'
+    github_username: 'Enter your github.com user?'
+    github_personal_key: 'Enter your github personal key?'
+  env:
+    SSH_KEY_PATH: echo {{ .Vars.github_ssh_key_path_raw | clean }}
+  command: |
+    mkdir -p .local/ddock/
+    cat <<EOF > ./.local/ddock/config.yml
+       github_username: {{ .Vars.github_username }}
+       github_ssh_key_path: ${SSH_KEY_PATH}
+    EOF
+    GIT_CREDENTIALS=${HOME}/.config/ddock/.git-credentials
+    cat <<EOF | $(git --exec-path)/git-credential-store --file=${GIT_CREDENTIALS} store
+    username={{ .Vars.github_username }}
+    password={{ .Vars.github_personal_key }}
+    host=github.com
+    protocol=https
+    EOF
+    echo "Don't forget that ${GIT_CREDENTIALS} has sensitive info"
+
+build:
+  summary: Build development environment docker image
+  usage: alfred build <image-tag>
+  config: ./.local/ddock/config.yml
+  command: |
+    cat <<EOF | cat Dockerfile - | docker build -t {{ index .Args 0 }} . -f-
+        ENV USER={{ .Vars.github_username }} \\
+          GROUP=`id -gn` \\
+          UID=`id -u` \\
+          GID=`id -g`
+
+        RUN groupadd --force --gid \$GID \$GROUP && \
+          useradd --create-home --gid \$GROUP --uid \$UID \$USER
+
+        RUN \
+          git config --file /home/\$USER/.gitconfig \
+              credential.helper store '--file ~/.git-credentials' && \
+          git config --file /home/\$USER/.gitconfig \
+              include.path .gitconfig-host && \
+          echo 'eval "\$(ssh-agent -s)"' >> /home/\$USER/.bashrc
+
+    EOF
+
+clean:
+  summary: Remove development environment docker image
+  usage: alfred clean <image-tag>
+  command: docker rmi {{ index .Args 0 }}
+
+start:
+  summary: Starts development environment
+  usage: alfred start <image-tag>
+  config: ./.local/ddock/config.yml
+  command: |
+    docker run -d -it --rm -w /home/{{ .Vars.github_username }}/src \
+      --name {{ index .Args 0 }} -p 5801:5801 \
+      `alfred -no-formatting docker-args {{ index .Args 0 }}` \
+      -h {{ index .Args 0 }}.local {{ index .Args 0 }} bash &
+
+    echo 'Use `docker attach {{ index .Args 0 }}` to connect to running container'
+
+stop:
+  summary: Stops development environment container
+  usage: alfred stop <image-tag>
+  command: docker stop {{ index .Args 0 }} 2>/dev/null || true
+
+docker-args:
+  summary: Returns list of arguments to run docker image
+  config: ./.local/ddock/config.yml
+  command: |
+    echo -w /home/{{ .Vars.github_username }}/src -u {{ .Vars.github_username }} \
+      -v `pwd`:/home/{{ .Vars.github_username }}/src \
+      -v "${HOME}/.gitconfig:/home/{{ .Vars.github_username }}/.gitconfig-host:ro" \
+      -v "${HOME}/.config/ddock/.git-credentials:/home/{{ .Vars.github_username }}/.git-credentials:ro" \
+      -v '{{ .Vars.github_ssh_key_path }}:/home/{{ .Vars.github_username }}/.ssh/id_rsa:ro' \
+      -v "${HOME}/.ssh/known_hosts:/home/{{ .Vars.github_username }}/.ssh/known_hosts:ro"
