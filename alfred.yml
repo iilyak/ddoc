@@ -54,12 +54,11 @@ start:
   usage: alfred start <image-tag>
   config: ./.local/ddock/config.yml
   command: |
-    docker run -d -it --rm -w /home/{{ .Vars.github_username }}/src \
+    docker run -it --rm -w /home/{{ .Vars.github_username }}/src \
       --name {{ index .Args 0 }} -p 5801:5801 \
       `alfred -no-formatting docker-args {{ index .Args 0 }}` \
-      -h {{ index .Args 0 }}.local {{ index .Args 0 }} bash &
-
-    echo 'Use `docker attach {{ index .Args 0 }}` to connect to running container'
+      -h {{ index .Args 0 }}.local {{ index .Args 0 }} bash
+  interactive: true
 
 stop:
   summary: Stops development environment container

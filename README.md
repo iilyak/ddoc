@@ -32,11 +32,7 @@ Helper alfred script for passing git credentials to docker container
    ```
    alfred iilyak/ddoc:start ddock.20.3.6
    ```
-2. Attach to container
-   ```
-   docker attach ddock.20.3.6
-   ```
-3. Add ssh key to ssh-agent inside docker container
+2. Add ssh key to ssh-agent inside docker container
    ```
    ssh-add ~/.ssh/id_rsa
    ```
